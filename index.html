@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Connectivity Checker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --online-color: #10b981;
+            --offline-color: #ef4444;
+            --skipped-color: #f59e0b;
+        }
+        .status-online { color: var(--online-color); }
+        .status-offline { color: var(--offline-color); }
+        .status-skipped { color: var(--skipped-color); }
+        .loader {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid var(--online-color);
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">IP Connectivity Checker</h1>
+            <p class="text-gray-600">Check connectivity status of multiple IP addresses from CSV data</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Input Method</label>
+                <div class="flex space-x-4 mb-4">
+                    <button id="pasteBtn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Paste CSV</button>
+                    <button id="fileBtn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Upload File</button>
+                </div>
+                <input type="file" id="fileInput" accept=".csv" class="hidden">
+            </div>
+
+            <div id="columnSettings" class="hidden mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">IP Column</label>
+                <select id="ipColumn" class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+
+            <div id="csvInput" class="hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-2">CSV Data</label>
+                <textarea id="csvData" class="w-full h-40 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                <div class="mt-4 flex space-x-2">
+                    <button id="parseBtn" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">Parse and Test</button>
+                    <button id="cancelBtn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500">Cancel</button>
+                </div>
+            </div>
+
+            <div id="pasteDialog" class="hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Paste CSV Data</label>
+                <textarea id="pasteData" class="w-full h-40 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                <div class="mt-4 flex space-x-2">
+                    <button id="parsePasteBtn" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">Parse and Test</button>
+                    <button id="cancelPasteBtn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="results" class="hidden bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Test Results</h2>
+            <div id="progress" class="mb-4">
+                <div class="flex items-center">
+                    <div class="loader mr-2"></div>
+                    <span id="progressText">Starting tests...</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                    <div id="progressBar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="resultsList" class="space-y-2 mb-4"></div>
+            <div id="summary" class="border-t pt-4 mt-4">
+                <h3 class="text-lg font-medium text-gray-700 mb-2">Summary</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <div id="totalIPs" class="text-2xl font-bold text-gray-800">0</div>
+                        <div class="text-sm text-gray-600">Total IPs</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="onlineCount" class="text-2xl font-bold status-online">0</div>
+                        <div class="text-sm text-gray-600">Online</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="offlineCount" class="text-2xl font-bold status-offline">0</div>
+                        <div class="text-sm text-gray-600">Offline</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="skippedCount" class="text-2xl font-bold status-skipped">0</div>
+                        <div class="text-sm text-gray-600">Skipped</div>
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <span class="text-gray-700">Success Rate: </span>
+                    <span id="successRate" class="font-bold text-gray-800">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // UI Elements
+            const pasteBtn = document.getElementById('pasteBtn');
+            const fileBtn = document.getElementById('fileBtn');
+            const fileInput = document.getElementById('fileInput');
+            const csvInput = document.getElementById('csvInput');
+            const csvData = document.getElementById('csvData');
+            const parseBtn = document.getElementById('parseBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            const pasteDialog = document.getElementById('pasteDialog');
+            const pasteData = document.getElementById('pasteData');
+            const parsePasteBtn = document.getElementById('parsePasteBtn');
+            const cancelPasteBtn = document.getElementById('cancelPasteBtn');
+            const results = document.getElementById('results');
+            const resultsList = document.getElementById('resultsList');
+            const progress = document.getElementById('progress');
+            const progressText = document.getElementById('progressText');
+            const progressBar = document.getElementById('progressBar');
+            const columnSettings = document.getElementById('columnSettings');
+            const ipColumn = document.getElementById('ipColumn');
+
+            // Event Listeners
+            pasteBtn.addEventListener('click', () => {
+                csvInput.classList.add('hidden');
+                pasteDialog.classList.remove('hidden');
+            });
+
+            fileBtn.addEventListener('click', () => {
+                pasteDialog.classList.add('hidden');
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        csvData.value = event.target.result;
+                        showColumnSettings(csvData.value);
+                        csvInput.classList.remove('hidden');
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            parseBtn.addEventListener('click', () => {
+                processCSV(csvData.value);
+            });
+
+            parsePasteBtn.addEventListener('click', () => {
+                showColumnSettings(pasteData.value);
+                csvData.value = pasteData.value;
+                pasteDialog.classList.add('hidden');
+                csvInput.classList.remove('hidden');
+                processCSV(pasteData.value);
+            });
+
+            cancelBtn.addEventListener('click', () => {
+                csvInput.classList.add('hidden');
+                csvData.value = '';
+                columnSettings.classList.add('hidden');
+            });
+
+            cancelPasteBtn.addEventListener('click', () => {
+                pasteDialog.classList.add('hidden');
+                pasteData.value = '';
+            });
+
+            function showColumnSettings(csvText) {
+                const lines = csvText.trim().split('\n');
+                if (lines.length > 0) {
+                    const headers = lines[0].split(',');
+                    ipColumn.innerHTML = '';
+                    
+                    headers.forEach((header, index) => {
+                        const option = document.createElement('option');
+                        option.value = index + 1; // 1-based indexing
+                        option.textContent = `Column ${index + 1}: ${header}`;
+                        if (header.toLowerCase().includes('ip')) {
+                            option.selected = true;
+                        }
+                        ipColumn.appendChild(option);
+                    });
+                    
+                    columnSettings.classList.remove('hidden');
+                }
+            }
+
+            async function processCSV(csvText) {
+                const column = parseInt(ipColumn.value) || 1;
+                const lines = csvText.trim().split('\n');
+                const ips = [];
+                
+                // Skip header if exists (first line might be headers)
+                const startIndex = isNaN(parseFloat(lines[0].split(',')[0])) ? 1 : 0;
+                
+                for (let i = startIndex; i < lines.length; i++) {
+                    const columns = lines[i].split(',');
+                    if (columns[column - 1]) {
+                        const ip = columns[column - 1].trim();
+                        if (ip && isValidIP(ip)) {
+                            ips.push(ip);
+                        }
+                    }
+                }
+                
+                if (ips.length === 0) {
+                    alert('No valid IP addresses found in the selected column');
+                    return;
+                }
+                
+                await testIPs(ips);
+            }
+
+            function isValidIP(ip) {
+                const regex = /^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
+                return regex.test(ip);
+            }
+
+            async function testIPs(ips) {
+                results.classList.remove('hidden');
+                progress.classList.remove('hidden');
+                resultsList.innerHTML = '';
+                
+                let online = 0;
+                let offline = 0;
+                let skipped = 0;
+                
+                for (let i = 0; i < ips.length; i++) {
+                    const ip = ips[i];
+                    const progressPercent = ((i + 1) / ips.length) * 100;
+                    
+                    progressText.textContent = `Testing ${ip}... (${i + 1}/${ips.length})`;
+                    progressBar.style.width = `${progressPercent}%`;
+                    
+                    try {
+                        const response = await fetch('/api/ping', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ ip }),
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if (data.status === 'online') {
+                            online++;
+                            addResultItem(ip, 'online', data.responseTime);
+                        } else if (data.status === 'offline') {
+                            offline++;
+                            addResultItem(ip, 'offline');
+                        } else {
+                            skipped++;
+                            addResultItem(ip, 'skipped', data.error);
+                        }
+                    } catch (error) {
+                        offline++;
+                        addResultItem(ip, 'offline', 'Request failed');
+                    }
+                }
+                
+                progress.classList.add('hidden');
+                updateSummary(ips.length, online, offline, skipped);
+            }
+
+            function addResultItem(ip, status, details = '') {
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between p-3 rounded-md ${
+                    status === 'online' ? 'bg-green-50 border border-green-200' : 
+                    status === 'offline' ? 'bg-red-50 border border-red-200' : 
+                    'bg-yellow-50 border border-yellow-200'
+                }`;
+                
+                const statusIcon = status === 'online' ? '✓' : status === 'offline' ? '✗' : '⚠';
+                const statusClass = `status-${status}`;
+                const statusText = status === 'online' ? 'ONLINE' : status === 'offline' ? 'OFFLINE' : 'SKIPPED';
+                
+                item.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="text-lg font-medium ${statusClass} mr-3">${statusIcon}</span>
+                        <span class="font-medium">${ip}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm font-medium ${statusClass}">${statusText}</div>
+                        ${details ? `<div class="text-xs text-gray-500">${details}</div>` : ''}
+                    </div>
+                `;
+                
+                resultsList.appendChild(item);
+            }
+
+            function updateSummary(total, online, offline, skipped) {
+                document.getElementById('totalIPs').textContent = total;
+                document.getElementById('onlineCount').textContent = online;
+                document.getElementById('offlineCount').textContent = offline;
+                document.getElementById('skippedCount').textContent = skipped;
+                
+                const successRate = total > 0 ? Math.round((online / total) * 100) : 0;
+                document.getElementById('successRate').textContent = `${successRate}%`;
+            }
+        });
+    </script>
+</body>
+</html>
